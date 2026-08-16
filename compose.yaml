@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:17
+    container_name: examiner-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: examiner
+      POSTGRES_PASSWORD: examiner_dev_password
+      POSTGRES_DB: examiner
+    ports:
+      - "5433:5432"
+    volumes:
+      - examiner_postgres_data:/var/lib/postgresql/data
+
+volumes:
+  examiner_postgres_data:
