@@ -142,10 +142,10 @@ function IndividualForm({ onBack }: { onBack: () => void }) {
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState("");
 
-  function submit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
 
-    addQuestion(
+    await addQuestion(
       question,
       answer,
       subject,
@@ -261,7 +261,7 @@ function BulkForm({ onBack }: { onBack: () => void }) {
       .filter((x) => x.question && x.answer);
   }
 
-  function submit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
 
     const parsed = parseQuestions(bulkText);
@@ -276,7 +276,7 @@ function BulkForm({ onBack }: { onBack: () => void }) {
       : null;
 
     for (const item of parsed) {
-      addQuestion(
+      await addQuestion(
         item.question,
         item.answer,
         subject,

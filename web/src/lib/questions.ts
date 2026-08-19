@@ -1,10 +1,7 @@
-export type Difficulty = "Easy" | "Intermediate" | "Advanced";
-
-export const DIFFICULTIES: Difficulty[] = [
-  "Easy",
-  "Intermediate",
-  "Advanced",
-];
+export type Difficulty =
+  | "Easy"
+  | "Intermediate"
+  | "Advanced";
 
 export type Question = {
   id: string;
@@ -15,147 +12,216 @@ export type Question = {
   difficulty: Difficulty;
   dueAt: string | null;
   completed: boolean;
-  createdAt: string;
 };
 
-const STORAGE_KEY = "examiner_questions";
+type ApiQuestion = {
+  id: string;
+  question: string;
+  answer: string;
+  subject: string;
+  unit: string;
+  difficulty: Difficulty;
+  created_at: string;
+  updated_at: string;
+};
 
-function normalizeQuestion(raw: any): Question {
-  let subject = raw.subject || "General";
-  let unit = raw.unit || "";
+const API_URL = "http://localhost:4000";
 
-  // Migrate the old format:
-  // "English — Unit I — Netiquette"
-  if (!raw.unit && typeof raw.subject === "string") {
-    const parts = raw.subject
-      .split("—")
-      .map((part: string) => part.trim())
-      .filter(Boolean);
-
-    if (parts.length >= 2) {
-      subject = parts[0];
-      unit = parts.slice(1).join(" — ");
-    }
-  }
-
-  const difficulty: Difficulty =
-    raw.difficulty === "Intermediate" || raw.difficulty === "Advanced"
-      ? raw.difficulty
-      : "Easy";
-
+function normalizeQuestion(q: ApiQuestion): Question {
   return {
-    id: raw.id || crypto.randomUUID(),
-    question: raw.question || "",
-    answer: raw.answer || "",
-    subject,
-    unit: unit || "General",
-    difficulty,
-    // Old questions were automatically due. We don't want that anymore.
-    dueAt: raw.unit ? raw.dueAt ?? null : null,
-    completed: Boolean(raw.completed),
-    createdAt: raw.createdAt || new Date().toISOString(),
+    id: q.id,
+    question: q.question,
+    answer: q.answer,
+    subject: q.subject,
+    unit: q.unit,
+    difficulty: q.difficulty,
+    dueAt: null,
+    completed: false,
   };
 }
 
-export function getQuestions(): Question[] {
-  if (typeof window === "undefined") return [];
+export async function getQuestions(): Promise<Question[]> {
+  const response = await fetch(
+    `${API_URL}/questions`,
+    {
+      cache: "no-store",
+    }
+  );
 
-  try {
-    const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
-
-    const normalized = Array.isArray(raw)
-      ? raw.map(normalizeQuestion)
-      : [];
-
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
-
-    return normalized;
-  } catch {
-    return [];
+  if (!response.ok) {
+    throw new Error(
+      `Failed to load questions: ${response.status}`
+    );
   }
+
+  const data = await response.json();
+
+  if (!Array.isArray(data)) {
+    console.error("Unexpected /questions response:", data);
+    throw new Error(
+      "API /questions did not return an array"
+    );
+  }
+
+  return data.map(normalizeQuestion);
 }
 
-export function saveQuestions(questions: Question[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(questions));
+export async function getQuestion(
+  id: string
+): Promise<Question | null> {
+  const response = await fetch(
+    `${API_URL}/questions/${id}`,
+    {
+      cache: "no-store",
+    }
+  );
+
+  if (response.status === 404) {
+    return null;
+  }
+
+  if (!response.ok) {
+    throw new Error("Failed to load question");
+  }
+
+  const data: ApiQuestion =
+    await response.json();
+
+  return normalizeQuestion(data);
 }
 
-export function addQuestion(
+export async function addQuestion(
   question: string,
   answer: string,
   subject: string,
   unit: string,
   difficulty: Difficulty,
-  dueAt: string | null
-): Question {
-  const questions = getQuestions();
-
-  const newQuestion: Question = {
-    id: crypto.randomUUID(),
-    question,
-    answer,
-    subject: subject.trim() || "General",
-    unit: unit.trim() || "General",
-    difficulty,
-    dueAt,
-    completed: false,
-    createdAt: new Date().toISOString(),
-  };
-
-  saveQuestions([...questions, newQuestion]);
-
-  return newQuestion;
-}
-
-export function updateQuestion(
-  id: string,
-  changes: Partial<Question>
-) {
-  const questions = getQuestions().map((q) =>
-    q.id === id ? { ...q, ...changes } : q
+  _dueAt: string | null
+): Promise<Question> {
+  const response = await fetch(
+    `${API_URL}/questions`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        question,
+        answer,
+        subject,
+        unit,
+        difficulty,
+      }),
+    }
   );
 
-  saveQuestions(questions);
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(
+      `Failed to add question: ${text}`
+    );
+  }
+
+  const data: ApiQuestion =
+    await response.json();
+
+  return normalizeQuestion(data);
 }
 
-export function deleteQuestion(id: string) {
-  const questions = getQuestions().filter((q) => q.id !== id);
-  saveQuestions(questions);
+export async function updateQuestion(
+  id: string,
+  changes: Partial<Question>
+): Promise<Question> {
+  const current = await getQuestion(id);
+
+  if (!current) {
+    throw new Error("Question not found");
+  }
+
+  const response = await fetch(
+    `${API_URL}/questions/${id}`,
+    {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        question:
+          changes.question ?? current.question,
+        answer:
+          changes.answer ?? current.answer,
+        subject:
+          changes.subject ?? current.subject,
+        unit:
+          changes.unit ?? current.unit,
+        difficulty:
+          changes.difficulty ?? current.difficulty,
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error("Failed to update question");
+  }
+
+  const data: ApiQuestion =
+    await response.json();
+
+  return normalizeQuestion(data);
 }
 
-export function clearQuestions() {
-  saveQuestions([]);
+export async function deleteQuestion(
+  id: string
+): Promise<void> {
+  const response = await fetch(
+    `${API_URL}/questions/${id}`,
+    {
+      method: "DELETE",
+    }
+  );
+
+  if (!response.ok && response.status !== 404) {
+    throw new Error("Failed to delete question");
+  }
 }
 
-export function getQuestion(id: string) {
-  return getQuestions().find((q) => q.id === id);
-}
-
-export function getUnlockedDifficulty(
+export async function getUnlockedDifficulty(
   questions: Question[],
   subject: string,
   unit: string
-): Difficulty {
+): Promise<Difficulty> {
   const unitQuestions = questions.filter(
-    (q) => q.subject === subject && q.unit === unit
+    (q) =>
+      q.subject === subject &&
+      q.unit === unit
   );
 
-  for (const difficulty of DIFFICULTIES) {
-    const levelQuestions = unitQuestions.filter(
-      (q) => q.difficulty === difficulty
-    );
-
-    if (levelQuestions.length === 0) continue;
-
-    const finished = levelQuestions.every((q) => q.completed);
-
-    if (!finished) return difficulty;
+  for (const difficulty of [
+    "Easy",
+    "Intermediate",
+    "Advanced",
+  ] as Difficulty[]) {
+    if (
+      unitQuestions.some(
+        (q) => q.difficulty === difficulty
+      )
+    ) {
+      return difficulty;
+    }
   }
 
-  return "Advanced";
+  return "Easy";
 }
 
 export function difficultyNumber(
   difficulty: Difficulty
 ): number {
-  return DIFFICULTIES.indexOf(difficulty);
+  return [
+    "Easy",
+    "Intermediate",
+    "Advanced",
+  ].indexOf(difficulty);
 }
+
+
+
