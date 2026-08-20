@@ -8,7 +8,11 @@ export default function ReviewPage() {
   const [questions, setQuestions] = useState<Question[]>([]);
 
   useEffect(() => {
-    setQuestions(getQuestions());
+    getQuestions()
+      .then(setQuestions)
+      .catch((err) => {
+        console.error("Failed to load questions:", err);
+      });
   }, []);
 
   return (

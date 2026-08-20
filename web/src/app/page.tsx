@@ -12,7 +12,11 @@ export default function Home() {
   const [questions, setQuestions] = useState<Question[]>([]);
 
   useEffect(() => {
-    setQuestions(getQuestions());
+    getQuestions()
+      .then(setQuestions)
+      .catch((err) => {
+        console.error("Failed to load questions:", err);
+      });
   }, []);
 
   const subjects = [...new Set(questions.map((q) => q.subject))];

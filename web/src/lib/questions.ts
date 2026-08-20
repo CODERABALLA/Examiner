@@ -25,7 +25,7 @@ type ApiQuestion = {
   updated_at: string;
 };
 
-const API_URL = "http://localhost:4000";
+const API_URL = "/api";
 
 function normalizeQuestion(q: ApiQuestion): Question {
   return {
@@ -185,11 +185,11 @@ export async function deleteQuestion(
   }
 }
 
-export async function getUnlockedDifficulty(
+export function getUnlockedDifficulty(
   questions: Question[],
   subject: string,
   unit: string
-): Promise<Difficulty> {
+): Difficulty {
   const unitQuestions = questions.filter(
     (q) =>
       q.subject === subject &&
@@ -222,6 +222,7 @@ export function difficultyNumber(
     "Advanced",
   ].indexOf(difficulty);
 }
+
 
 
 

@@ -12,9 +12,7 @@ if (!databaseUrl) {
 const sql = postgres(databaseUrl);
 
 const app = new Elysia()
-  .use(cors({
-    origin: true,
-  }))
+  .use(cors({ origin: (process.env.CORS_ORIGIN || "http://localhost:3000").split(","), credentials: false }))
 
   .get("/", () => ({
     message: "Examiner API is running",
@@ -200,3 +198,4 @@ const app = new Elysia()
 console.log(
   `Examiner API running on port ${app.server?.port}`
 );
+

@@ -23,11 +23,19 @@ export default function QuestionPage() {
   const [editing, setEditing] = useState(false);
 
   useEffect(() => {
-    const all = getQuestions();
-    const found = getQuestion(String(params.id));
-
-    setQuestions(all);
-    setQuestion(found || null);
+    async function load() {
+      try {
+        const [all, found] = await Promise.all([
+          getQuestions(),
+          getQuestion(String(params.id)),
+        ]);
+        setQuestions(all);
+        setQuestion(found);
+      } catch (err) {
+        console.error("Failed to load question:", err);
+      }
+    }
+    load();
   }, [params.id]);
 
   if (!question) {
@@ -55,7 +63,7 @@ export default function QuestionPage() {
         onCancel={() => setEditing(false)}
         onSaved={(updated) => {
           setQuestion(updated);
-          setQuestions(getQuestions());
+          getQuestions().then(setQuestions).catch(console.error);
           setEditing(false);
         }}
       />
@@ -86,11 +94,15 @@ export default function QuestionPage() {
     question.unit
   );
 
-  function markCompleteAndNext() {
+  async function markCompleteAndNext() {
     if (!question) return;
-    updateQuestion(question.id, {
-      completed: true,
-    });
+    try {
+      await updateQuestion(question.id, {
+        completed: true,
+      });
+    } catch (err) {
+      console.error("Failed to mark complete:", err);
+    }
 
     if (next) {
       router.push(`/questions/${next.id}`);
@@ -99,11 +111,15 @@ export default function QuestionPage() {
     }
   }
 
-  function handleDelete() {
+  async function handleDelete() {
     if (!window.confirm("Delete this question?")) return;
     if (!question) return;
 
-    deleteQuestion(question.id);
+    try {
+      await deleteQuestion(question.id);
+    } catch (err) {
+      console.error("Failed to delete question:", err);
+    }
     router.push("/questions");
   }
 
@@ -255,10 +271,10 @@ function EditQuestion({
       : ""
   );
 
-  function save(e: React.FormEvent) {
+  async function save(e: React.FormEvent) {
     e.preventDefault();
 
-    updateQuestion(question.id, {
+    await updateQuestion(question.id, {
       question: q,
       answer,
       subject,
@@ -269,8 +285,8 @@ function EditQuestion({
         : null,
     });
 
-    const updated = getQuestion(question.id)!;
-    onSaved(updated);
+    const updated = await getQuestion(question.id);
+    if (updated) onSaved(updated);
   }
 
   return (
