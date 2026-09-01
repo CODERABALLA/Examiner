@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 // A student's own working space for maths. Rendered as a grid-paper
 // textarea. Content is kept in local/browser state only — it is the
@@ -11,14 +11,20 @@ export default function MathsWorkspace({
   questionId: string;
 }) {
   const storageKey = `maths_working_${questionId}`;
-  const [value, setValue] = useState(() => {
-    try {
-      const saved = localStorage.getItem(storageKey);
-      return saved ?? "";
-    } catch {
-      return "";
-    }
-  });
+  const [value, setValue] = useState("");
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      try {
+        const saved = localStorage.getItem(storageKey);
+        if (saved != null) setValue(saved);
+      } catch {
+        // ignore storage access errors
+      }
+    }, 0);
+
+    return () => clearTimeout(timer);
+  }, [storageKey]);
 
   function handleChange(next: string) {
     setValue(next);

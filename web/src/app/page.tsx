@@ -20,18 +20,23 @@ export default function Home() {
 
   const [questions, setQuestions] = useState<Question[]>([]);
   const [dueCount, setDueCount] = useState(0);
-  const [resume] = useState<{
+  const [resume, setResume] = useState<{
     subject: string;
     unit: string;
-  } | null>(() => {
-    try {
-      const raw = localStorage.getItem("examiner_last_study");
-      if (raw) return JSON.parse(raw);
-    } catch {
-      // ignore
-    }
-    return null;
-  });
+  } | null>(null);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      try {
+        const raw = localStorage.getItem("examiner_last_study");
+        if (raw) setResume(JSON.parse(raw));
+      } catch {
+        // ignore
+      }
+    }, 0);
+
+    return () => clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     getQuestions()
