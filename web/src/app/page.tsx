@@ -1,19 +1,48 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import DifficultyBadge from "@/components/study/DifficultyBadge";
 import {
+  findStartQuestion,
   getQuestions,
+  getUnitQuestions,
+  getUnitStats,
   getUnlockedDifficulty,
+  isDifficultyUnlocked,
+  DIFFICULTY_ORDER,
   type Question,
 } from "@/lib/questions";
 
 export default function Home() {
+  const router = useRouter();
+
   const [questions, setQuestions] = useState<Question[]>([]);
+  const [dueCount, setDueCount] = useState(0);
+  const [resume] = useState<{
+    subject: string;
+    unit: string;
+  } | null>(() => {
+    try {
+      const raw = localStorage.getItem("examiner_last_study");
+      if (raw) return JSON.parse(raw);
+    } catch {
+      // ignore
+    }
+    return null;
+  });
 
   useEffect(() => {
     getQuestions()
-      .then(setQuestions)
+      .then((data) => {
+        setQuestions(data);
+        setDueCount(
+          data.filter(
+            (q) => q.dueAt && new Date(q.dueAt).getTime() <= Date.now()
+          ).length
+        );
+      })
       .catch((err) => {
         console.error("Failed to load questions:", err);
       });
@@ -21,53 +50,15 @@ export default function Home() {
 
   const subjects = [...new Set(questions.map((q) => q.subject))];
 
-  const due = questions.filter(
-    (q) => q.dueAt && new Date(q.dueAt).getTime() <= Date.now()
-  );
+  const totalCompleted = questions.filter((q) => q.completed).length;
+  const totalPending = questions.length - totalCompleted;
 
-  const units = [...new Set(
-    questions.map((q) => `${q.subject}|||${q.unit}`)
-  )].map((key) => {
-    const [subject, unit] = key.split("|||");
-    return { subject, unit };
-  });
-
-  const currentUnit = units.find(({ subject, unit }) =>
-    questions.some(
-      (q) =>
-        q.subject === subject &&
-        q.unit === unit &&
-        !q.completed
-    )
-  );
-
-  const currentIndex = currentUnit
-    ? units.findIndex(
-      (u) =>
-        u.subject === currentUnit.subject &&
-        u.unit === currentUnit.unit
-    )
-    : -1;
-
-  const nextUnit =
-    currentIndex >= 0 && currentIndex < units.length - 1
-      ? units[currentIndex + 1]
-      : null;
-
-  const startQuestion = currentUnit
-    ? questions.find(
-      (q) =>
-        q.subject === currentUnit.subject &&
-        q.unit === currentUnit.unit &&
-        !q.completed &&
-        q.difficulty ===
-        getUnlockedDifficulty(
-          questions,
-          currentUnit.subject,
-          currentUnit.unit
-        )
-    )
-    : null;
+  const units = [...new Set(questions.map((q) => `${q.subject}|||${q.unit}`))]
+    .map((key) => {
+      const [subject, unit] = key.split("|||");
+      return { subject, unit };
+    })
+    .sort((a, b) => a.subject.localeCompare(b.subject));
 
   return (
     <main className="min-h-screen bg-slate-50">
@@ -82,76 +73,60 @@ export default function Home() {
           </h1>
 
           <p className="mt-3 max-w-2xl text-lg text-slate-600">
-            Work through each subject, unit and difficulty level in order.
+            Choose a subject and topic to study, then work through each
+            difficulty level in order.
           </p>
         </header>
 
-        <div className="mt-8 grid gap-5 md:grid-cols-3">
+        <div className="mt-8 grid gap-5 md:grid-cols-4">
           <Stat label="Total questions" value={questions.length} />
-          <Stat label="Due now" value={due.length} red />
+          <Stat label="Completed" value={totalCompleted} />
+          <Stat label="Due now" value={dueCount} red />
           <Stat label="Subjects" value={subjects.length} />
         </div>
 
-        {currentUnit ? (
-          <section className="mt-8 rounded-3xl border-2 border-indigo-200 bg-white p-8 shadow-sm">
-            <p className="text-sm font-bold uppercase tracking-wider text-indigo-600">
-              Current unit
-            </p>
+        <section className="mt-8 rounded-3xl border-2 border-indigo-200 bg-white p-8 shadow-sm">
+          <p className="text-sm font-bold uppercase tracking-wider text-indigo-600">
+            Ready to study?
+          </p>
 
-            <h2 className="mt-2 text-3xl font-bold text-slate-900">
-              {currentUnit.unit}
-            </h2>
+          <p className="mt-2 text-slate-600">
+            {questions.length === 0
+              ? "Add your first question to begin studying."
+              : `You have ${totalPending} question${totalPending === 1 ? "" : "s"} left across ${units.length} topic${units.length === 1 ? "" : "s"}.`}
+          </p>
 
-            <p className="mt-2 text-slate-500">
-              {currentUnit.subject}
-            </p>
+          <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+            <Link
+              href="/study"
+              className="flex-1 rounded-2xl bg-indigo-600 px-6 py-4 text-center text-lg font-bold text-white hover:bg-indigo-700"
+            >
+              Start studying →
+            </Link>
 
-            <p className="mt-4 font-semibold text-slate-700">
-              Current level:{" "}
-              <span className="text-indigo-600">
-                {getUnlockedDifficulty(
-                  questions,
-                  currentUnit.subject,
-                  currentUnit.unit
-                )}
-              </span>
-            </p>
-
-            {startQuestion && (
-              <Link
-                href={`/questions/${startQuestion.id}`}
-                className="mt-6 inline-block rounded-xl bg-indigo-600 px-6 py-3 font-bold text-white hover:bg-indigo-700"
+            {resume && (
+              <button
+                onClick={() => {
+                  const start = findStartQuestion(
+                    questions,
+                    resume.subject,
+                    resume.unit
+                  );
+                  if (start) {
+                    router.push(
+                      `/questions/${start.id}?subject=${encodeURIComponent(
+                        resume.subject
+                      )}&unit=${encodeURIComponent(resume.unit)}`
+                    );
+                  }
+                }}
+                className="flex-1 rounded-2xl border border-indigo-300 bg-indigo-50 px-6 py-4 text-lg font-bold text-indigo-700 hover:bg-indigo-100"
               >
-                Start studying →
-              </Link>
+                Continue where I left off →
+              </button>
             )}
-          </section>
-        ) : (
-          <section className="mt-8 rounded-3xl bg-emerald-50 p-8">
-            <h2 className="text-2xl font-bold text-emerald-800">
-              All questions completed 🎉
-            </h2>
-            <p className="mt-2 text-emerald-700">
-              Add more questions or review your completed work.
-            </p>
-          </section>
-        )}
-
-        {nextUnit && (
-          <section className="mt-8 rounded-2xl border border-slate-200 bg-white p-6">
-            <p className="text-sm font-bold uppercase tracking-wider text-slate-500">
-              Up next
-            </p>
-
-            <h2 className="mt-2 text-2xl font-bold text-slate-900">
-              {nextUnit.unit}
-            </h2>
-
-            <p className="mt-1 text-slate-500">
-              {nextUnit.subject}
-            </p>
-          </section>
-        )}
+          </div>
+        </section>
 
         <section className="mt-10">
           <div className="flex items-center justify-between">
@@ -185,12 +160,12 @@ export default function Home() {
 
                   <div className="space-y-3 border-t border-slate-100 p-4">
                     {subjectUnits.map((u) => {
-                      const unitQuestions = questions.filter(
-                        (q) =>
-                          q.subject === subject &&
-                          q.unit === u.unit
+                      const unitQuestions = getUnitQuestions(
+                        questions,
+                        subject,
+                        u.unit
                       );
-
+                      const stats = getUnitStats(questions, subject, u.unit);
                       const unlocked = getUnlockedDifficulty(
                         questions,
                         subject,
@@ -209,11 +184,34 @@ export default function Home() {
                               </h3>
 
                               <p className="mt-1 text-sm text-slate-500">
-                                {unitQuestions.length} questions ·{" "}
-                                {unlocked} unlocked
+                                {stats.completed}/{stats.total} completed
                               </p>
                             </div>
 
+                            <div className="flex flex-wrap items-center gap-2">
+                              <div className="flex gap-1.5">
+                                {DIFFICULTY_ORDER.map((level) => {
+                                  const isUnlocked =
+                                    isDifficultyUnlocked(
+                                      unitQuestions,
+                                      level
+                                    ) &&
+                                    unitQuestions.some(
+                                      (qq) => qq.difficulty === level
+                                    );
+                                  return (
+                                    <DifficultyBadge
+                                      key={level}
+                                      difficulty={level}
+                                      locked={!isUnlocked}
+                                    />
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="mt-4 flex flex-wrap gap-2">
                             <Link
                               href={`/questions?subject=${encodeURIComponent(
                                 subject
@@ -222,26 +220,23 @@ export default function Home() {
                             >
                               View questions
                             </Link>
+
+                            <Link
+                              href={`/study?subject=${encodeURIComponent(
+                                subject
+                              )}&unit=${encodeURIComponent(u.unit)}`}
+                              className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-bold text-white hover:bg-indigo-700"
+                            >
+                              Study
+                            </Link>
                           </div>
 
-                          <div className="mt-4 flex flex-wrap gap-2">
-                            {["Easy", "Intermediate", "Advanced"].map(
-                              (level) => {
-                                const count = unitQuestions.filter(
-                                  (q) => q.difficulty === level
-                                ).length;
-
-                                return (
-                                  <span
-                                    key={level}
-                                    className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600"
-                                  >
-                                    {level}: {count}
-                                  </span>
-                                );
-                              }
+                          {unlocked === "Advanced" &&
+                            stats.completed === stats.total && (
+                              <p className="mt-3 text-sm font-semibold text-emerald-600">
+                                ✓ Completed
+                              </p>
                             )}
-                          </div>
                         </div>
                       );
                     })}
@@ -252,12 +247,18 @@ export default function Home() {
           </div>
         </section>
 
-        <div className="mt-8">
+        <div className="mt-8 flex flex-wrap gap-5">
           <Link
             href="/questions"
             className="font-semibold text-indigo-600 hover:text-indigo-800"
           >
             View all questions →
+          </Link>
+          <Link
+            href="/review"
+            className="font-semibold text-indigo-600 hover:text-indigo-800"
+          >
+            Review answers →
           </Link>
         </div>
       </div>
@@ -276,13 +277,15 @@ function Stat({
 }) {
   return (
     <div
-      className={`rounded-2xl border bg-white p-6 shadow-sm ${red ? "border-red-200" : "border-slate-200"
-        }`}
+      className={`rounded-2xl border bg-white p-6 shadow-sm ${
+        red ? "border-red-200" : "border-slate-200"
+      }`}
     >
       <p className="text-sm font-medium text-slate-500">{label}</p>
       <p
-        className={`mt-2 text-4xl font-bold ${red ? "text-red-600" : "text-slate-900"
-          }`}
+        className={`mt-2 text-4xl font-bold ${
+          red ? "text-red-600" : "text-slate-900"
+        }`}
       >
         {value}
       </p>

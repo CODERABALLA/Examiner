@@ -1,24 +1,49 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-import {
-  addQuestion,
-  type Difficulty,
-} from "@/lib/questions";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useState } from "react";
+import { addQuestion, type Difficulty } from "@/lib/questions";
+import QuestionForm, {
+  type QuestionFormValues,
+} from "@/components/questions/QuestionForm";
 
 export default function NewQuestionPage() {
+  return (
+    <Suspense fallback={null}>
+      <NewQuestionPageInner />
+    </Suspense>
+  );
+}
+
+function NewQuestionPageInner() {
+  const searchParams = useSearchParams();
+
   const [mode, setMode] = useState<"choice" | "individual" | "bulk">(
     "choice"
   );
 
+  const prefilledSubject = searchParams.get("subject") ?? "";
+  const prefilledUnit = searchParams.get("unit") ?? "";
+
   if (mode === "individual") {
-    return <IndividualForm onBack={() => setMode("choice")} />;
+    return (
+      <IndividualForm
+        onBack={() => setMode("choice")}
+        initialSubject={prefilledSubject}
+        initialUnit={prefilledUnit}
+      />
+    );
   }
 
   if (mode === "bulk") {
-    return <BulkForm onBack={() => setMode("choice")} />;
+    return (
+      <BulkForm
+        onBack={() => setMode("choice")}
+        initialSubject={prefilledSubject}
+        initialUnit={prefilledUnit}
+      />
+    );
   }
 
   return (
@@ -71,90 +96,38 @@ export default function NewQuestionPage() {
   );
 }
 
-function Fields({
-  subject,
-  setSubject,
-  unit,
-  setUnit,
-  difficulty,
-  setDifficulty,
-  dueAt,
-  setDueAt,
-}: any) {
-  return (
-    <>
-      <label className="block font-semibold">Subject</label>
-      <input
-        value={subject}
-        onChange={(e) => setSubject(e.target.value)}
-        className="mt-2 w-full rounded-xl border border-slate-300 p-3"
-        placeholder="e.g. English"
-        required
-      />
-
-      <label className="mt-5 block font-semibold">
-        Unit / Chapter
-      </label>
-      <input
-        value={unit}
-        onChange={(e) => setUnit(e.target.value)}
-        className="mt-2 w-full rounded-xl border border-slate-300 p-3"
-        placeholder="e.g. Unit I — Netiquette"
-        required
-      />
-
-      <label className="mt-5 block font-semibold">
-        Difficulty
-      </label>
-      <select
-        value={difficulty}
-        onChange={(e) =>
-          setDifficulty(e.target.value as Difficulty)
-        }
-        className="mt-2 w-full rounded-xl border border-slate-300 bg-white p-3"
-      >
-        <option>Easy</option>
-        <option>Intermediate</option>
-        <option>Advanced</option>
-      </select>
-
-      <label className="mt-5 block font-semibold">
-        Due date and time
-      </label>
-      <input
-        type="datetime-local"
-        value={dueAt}
-        onChange={(e) => setDueAt(e.target.value)}
-        className="mt-2 w-full rounded-xl border border-slate-300 p-3"
-      />
-    </>
-  );
-}
-
-function IndividualForm({ onBack }: { onBack: () => void }) {
+function IndividualForm({
+  onBack,
+  initialSubject,
+  initialUnit,
+}: {
+  onBack: () => void;
+  initialSubject: string;
+  initialUnit: string;
+}) {
   const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
 
-  const [subject, setSubject] = useState("");
-  const [unit, setUnit] = useState("");
-  const [difficulty, setDifficulty] =
-    useState<Difficulty>("Easy");
-  const [dueAt, setDueAt] = useState("");
-  const [question, setQuestion] = useState("");
-  const [answer, setAnswer] = useState("");
+  async function submit(values: QuestionFormValues) {
+    setBusy(true);
+    setError("");
 
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-
-    await addQuestion(
-      question,
-      answer,
-      subject,
-      unit,
-      difficulty,
-      dueAt ? new Date(dueAt).toISOString() : null
-    );
-
-    router.push("/questions");
+    try {
+      await addQuestion(
+        values.question,
+        values.answer,
+        values.subject,
+        values.unit,
+        values.difficulty,
+        values.dueAt
+      );
+      router.push("/questions");
+    } catch (err) {
+      console.error(err);
+      setError("Could not add the question. Please try again.");
+      setBusy(false);
+    }
   }
 
   return (
@@ -167,63 +140,35 @@ function IndividualForm({ onBack }: { onBack: () => void }) {
           ← Add question
         </button>
 
-        <h1 className="mt-3 text-3xl font-bold">
+        <h1 className="mt-3 text-3xl font-bold text-slate-900">
           Add one question
         </h1>
 
-        <form
+        <QuestionForm
+          initial={{ subject: initialSubject, unit: initialUnit }}
+          submitLabel="Save question"
           onSubmit={submit}
-          className="mt-8 rounded-2xl bg-white p-6 shadow-sm"
-        >
-          <Fields
-            {...{
-              subject,
-              setSubject,
-              unit,
-              setUnit,
-              difficulty,
-              setDifficulty,
-              dueAt,
-              setDueAt,
-            }}
-          />
-
-          <label className="mt-5 block font-semibold">
-            Question
-          </label>
-          <textarea
-            value={question}
-            onChange={(e) => setQuestion(e.target.value)}
-            rows={5}
-            className="mt-2 w-full rounded-xl border border-slate-300 p-3"
-            required
-          />
-
-          <label className="mt-5 block font-semibold">
-            Answer
-          </label>
-          <textarea
-            value={answer}
-            onChange={(e) => setAnswer(e.target.value)}
-            rows={8}
-            className="mt-2 w-full rounded-xl border border-slate-300 p-3"
-            required
-          />
-
-          <button className="mt-6 w-full rounded-xl bg-indigo-600 py-4 font-bold text-white">
-            Save question
-          </button>
-        </form>
+          busy={busy}
+          error={error}
+        />
       </div>
     </main>
   );
 }
 
-function BulkForm({ onBack }: { onBack: () => void }) {
+function BulkForm({
+  onBack,
+  initialSubject,
+  initialUnit,
+}: {
+  onBack: () => void;
+  initialSubject: string;
+  initialUnit: string;
+}) {
   const router = useRouter();
 
-  const [subject, setSubject] = useState("");
-  const [unit, setUnit] = useState("");
+  const [subject, setSubject] = useState(initialSubject);
+  const [unit, setUnit] = useState(initialUnit);
   const [difficulty, setDifficulty] =
     useState<Difficulty>("Easy");
   const [dueAt, setDueAt] = useState("");
@@ -271,25 +216,33 @@ function BulkForm({ onBack }: { onBack: () => void }) {
       return;
     }
 
-    const isoDue = dueAt
-      ? new Date(dueAt).toISOString()
-      : null;
+    setError("");
+    const isoDue = dueAt ? new Date(dueAt).toISOString() : null;
 
-    for (const item of parsed) {
-      await addQuestion(
-        item.question,
-        item.answer,
-        subject,
-        unit,
-        difficulty,
-        isoDue
-      );
+    try {
+      for (const item of parsed) {
+        await addQuestion(
+          item.question,
+          item.answer,
+          subject,
+          unit,
+          difficulty,
+          isoDue
+        );
+      }
+    } catch (err) {
+      console.error(err);
+      setError("Could not save questions. Please try again.");
+      return;
     }
 
     router.push("/questions");
   }
 
   const count = parseQuestions(bulkText).length;
+
+  const fieldClass =
+    "mt-2 w-full rounded-xl border border-slate-300 p-3";
 
   return (
     <main className="min-h-screen bg-slate-50">
@@ -301,7 +254,7 @@ function BulkForm({ onBack }: { onBack: () => void }) {
           ← Add question
         </button>
 
-        <h1 className="mt-3 text-3xl font-bold">
+        <h1 className="mt-3 text-3xl font-bold text-slate-900">
           Add multiple questions
         </h1>
 
@@ -309,17 +262,47 @@ function BulkForm({ onBack }: { onBack: () => void }) {
           onSubmit={submit}
           className="mt-8 rounded-2xl bg-white p-6 shadow-sm"
         >
-          <Fields
-            {...{
-              subject,
-              setSubject,
-              unit,
-              setUnit,
-              difficulty,
-              setDifficulty,
-              dueAt,
-              setDueAt,
-            }}
+          <label className="block font-semibold">Subject</label>
+          <input
+            value={subject}
+            onChange={(e) => setSubject(e.target.value)}
+            className={fieldClass}
+            placeholder="e.g. Mathematics"
+            required
+          />
+
+          <label className="mt-5 block font-semibold">
+            Unit / Chapter
+          </label>
+          <input
+            value={unit}
+            onChange={(e) => setUnit(e.target.value)}
+            className={fieldClass}
+            placeholder="e.g. Algebra"
+            required
+          />
+
+          <label className="mt-5 block font-semibold">Difficulty</label>
+          <select
+            value={difficulty}
+            onChange={(e) =>
+              setDifficulty(e.target.value as Difficulty)
+            }
+            className={`${fieldClass} bg-white`}
+          >
+            <option>Easy</option>
+            <option>Intermediate</option>
+            <option>Advanced</option>
+          </select>
+
+          <label className="mt-5 block font-semibold">
+            Due date and time (optional)
+          </label>
+          <input
+            type="datetime-local"
+            value={dueAt}
+            onChange={(e) => setDueAt(e.target.value)}
+            className={fieldClass}
           />
 
           <label className="mt-5 block font-semibold">
@@ -337,7 +320,7 @@ Answer: Netiquette is...
 Q2: Why is it important?
 
 Answer: Because...`}
-            className="mt-2 w-full rounded-xl border border-slate-300 p-4"
+            className={`${fieldClass} p-4`}
             required
           />
 
@@ -351,7 +334,7 @@ Answer: Because...`}
             </p>
           )}
 
-          <button className="mt-6 w-full rounded-xl bg-indigo-600 py-4 font-bold text-white">
+          <button className="mt-6 w-full rounded-xl bg-indigo-600 py-4 font-bold text-white hover:bg-indigo-700">
             Save all questions
           </button>
         </form>
